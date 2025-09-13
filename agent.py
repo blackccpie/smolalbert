@@ -39,15 +39,26 @@ class TavilyExtractTool(Tool):
         response = tavily_client.extract(url)
         return {"results": response}
 
+#model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+#model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
+model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+provider = "nebius"
+
 # Set up the agent with the Tavily tool and a model
 api_key = os.getenv("TAVILY_API_KEY")
 search_tool = TavilySearchTool()
 extract_tool = TavilyExtractTool()
-model = InferenceClientModel(model_id="Qwen/Qwen3-Coder-30B-A3B-Instruct", provider="nebius")
+model = InferenceClientModel(model_id=model_id, provider=provider)
 agent = CodeAgent(
     tools=[search_tool, extract_tool], 
     model=model, 
     stream_outputs=True,
+    instructions=(
+        "When writing the final answer, including the most relevant URL(s) "
+        "from your search results as inline Markdown hyperlinks is MANDATORY. "
+        "Example format: ... (see [1](https://example1.com)) ... (see [2](https://example2.com)) ... "
+        "Do not invent URL(s) — only use the ones you were provided."
+    )
 )
 
 gradio_ui = GradioUI(agent, file_upload_folder=None, reset_agent_memory=True)
