@@ -314,12 +314,17 @@ class AgentUI:
         Interacts with the agent and streams results into two separate histories:
             - verbose_messages: full reasoning stream (Chatterbox)
             - quiet_messages: only user prompt + final answer (Quiet)
+        Quiet is enhanced with pending "Step N..." indicators only (no generic thinking text).
         """
         import gradio as gr
 
         # Get the agent type from the template agent
         if "agent" not in session_state:
             session_state["agent"] = self.agent
+
+        # clear previous messages
+        verbose_messages = []
+        quiet_messages = []
 
         try:
             # Append the user message to both histories (quiet keeps the user query)
@@ -330,7 +335,8 @@ class AgentUI:
             # yield initial state to update UI immediately
             yield verbose_messages, quiet_messages
 
-            # stream agent outputs
+            quiet_pending_idx = None
+
             for msg in stream_to_gradio(
                 session_state["agent"], task=prompt, reset_agent_memory=self.reset_agent_memory
             ):
@@ -344,18 +350,36 @@ class AgentUI:
                     else:
                         verbose_messages.append(msg)
 
+                    content_text = msg.content if isinstance(msg.content, str) else ""
+
                     # Detect final answer messages and append to quiet
                     # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use "**Final answer:**" text
-                    content_text = msg.content if isinstance(msg.content, str) else ""
                     if "final answer" in content_text.lower():
-                        # append final answer to quiet (as assistant)
-                        quiet_messages.append(
-                            gr.ChatMessage(role=MessageRole.ASSISTANT, content=content_text, metadata={"status": "done"})
-                        )
+                        # Replace pending with final answer in Quiet
+                        final_msg = gr.ChatMessage(role=MessageRole.ASSISTANT, content=content_text, metadata={"status": "done"})
+                        if quiet_pending_idx is not None:
+                            quiet_messages[quiet_pending_idx] = final_msg
+                            quiet_pending_idx = None
+                        else:
+                            quiet_messages.append(final_msg)
+                    else:
+                        # Look for "Step <number>" pattern
+                        match = re.search(r"\bStep\s*(\d+)\b", content_text, re.IGNORECASE)
+                        if match:
+                            step_num = match.group(1)
+                            pending_text = f"⏳ Step {step_num}..."
+                            if quiet_pending_idx is None:
+                                quiet_messages.append(
+                                    gr.ChatMessage(
+                                        role=MessageRole.ASSISTANT,
+                                        content=pending_text,
+                                        metadata={"status": "pending"},
+                                    )
+                                )
+                                quiet_pending_idx = len(quiet_messages) - 1
+                            else:
+                                quiet_messages[quiet_pending_idx].content = pending_text
 
-                    yield verbose_messages, quiet_messages
-
-                # Streaming delta strings (partial assistant reply) — only update verbose
                 elif isinstance(msg, str):
                     text = msg.replace("<", r"\<").replace(">", r"\>")
                     if verbose_messages and verbose_messages[-1].metadata.get("status") == "pending":
