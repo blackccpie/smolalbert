@@ -85,5 +85,5 @@ agent = CodeAgent(
     )
 )
 
-agent_ui = AgentUI(agent, file_upload_folder=None, reset_agent_memory=True)
+agent_ui = AgentUI(agent, reset_agent_memory=True)
 agent_ui.launch(share=False)

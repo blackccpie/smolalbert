@@ -293,30 +293,28 @@ class AgentUI:
     """
     Gradio interface for interacting with a [`MultiStepAgent`].
 
-    This class provides a web interface to interact with the agent in real-time, allowing users to submit prompts, upload files, and receive responses in a chat-like format.
+    This class provides a web interface to interact with the agent in real-time, allowing users to submit prompts, and receive responses in a chat-like format.
     It  can reset the agent's memory at the start of each interaction if desired.
-    It supports file uploads, which are saved to a specified folder.
     It uses the [`gradio.Chatbot`] component to display the conversation history.
     This class requires the `gradio` extra to be installed: `pip install 'smolagents[gradio]'`.
 
     Args:
         agent ([`MultiStepAgent`]): The agent to interact with.
-        file_upload_folder (`str`, *optional*): The folder where uploaded files will be saved.
-            If not provided, file uploads are disabled.
         reset_agent_memory (`bool`, *optional*, defaults to `False`): Whether to reset the agent's memory at the start of each interaction.
             If `True`, the agent will not remember previous interactions.
     """
 
-    def __init__(self, agent: MultiStepAgent, file_upload_folder: str | None = None, reset_agent_memory: bool = False):
+    def __init__(self, agent: MultiStepAgent, reset_agent_memory: bool = False):
         self.agent = agent
-        self.file_upload_folder = Path(file_upload_folder) if file_upload_folder is not None else None
         self.reset_agent_memory = reset_agent_memory
         self.description = getattr(agent, "description", None)
-        if self.file_upload_folder is not None:
-            if not self.file_upload_folder.exists():
-                self.file_upload_folder.mkdir(parents=True, exist_ok=True)
 
-    def interact_with_agent(self, prompt, messages, session_state):
+    def interact_with_agent(self, prompt, verbose_messages, quiet_messages, session_state):
+        """
+        Interacts with the agent and streams results into two separate histories:
+            - verbose_messages: full reasoning stream (Chatterbox)
+            - quiet_messages: only user prompt + final answer (Quiet)
+        """
         import gradio as gr
 
         # Get the agent type from the template agent
@@ -324,79 +322,57 @@ class AgentUI:
             session_state["agent"] = self.agent
 
         try:
-            messages.append(gr.ChatMessage(role="user", content=prompt, metadata={"status": "done"}))
-            yield messages
+            # Append the user message to both histories (quiet keeps the user query)
+            user_msg = gr.ChatMessage(role="user", content=prompt, metadata={"status": "done"})
+            verbose_messages.append(user_msg)
+            quiet_messages.append(user_msg)
 
+            # yield initial state to update UI immediately
+            yield verbose_messages, quiet_messages
+
+            # stream agent outputs
             for msg in stream_to_gradio(
                 session_state["agent"], task=prompt, reset_agent_memory=self.reset_agent_memory
             ):
+
+                # Full gr.ChatMessage object (from steps) — append to verbose always
                 if isinstance(msg, gr.ChatMessage):
-                    messages[-1].metadata["status"] = "done"
-                    messages.append(msg)
-                elif isinstance(msg, str):  # Then it's only a completion delta
-                    msg = msg.replace("<", r"\<").replace(">", r"\>")  # HTML tags seem to break Gradio Chatbot
-                    if messages[-1].metadata["status"] == "pending":
-                        messages[-1].content = msg
+                    # Mark last verbose pending -> done if needed and append
+                    if verbose_messages and verbose_messages[-1].metadata.get("status") == "pending":
+                        verbose_messages[-1].metadata["status"] = "done"
+                        verbose_messages[-1].content = msg.content
                     else:
-                        messages.append(
-                            gr.ChatMessage(role=MessageRole.ASSISTANT, content=msg, metadata={"status": "pending"})
+                        verbose_messages.append(msg)
+
+                    # Detect final answer messages and append to quiet
+                    # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use "**Final answer:**" text
+                    content_text = msg.content if isinstance(msg.content, str) else ""
+                    if "final answer" in content_text.lower():
+                        # append final answer to quiet (as assistant)
+                        quiet_messages.append(
+                            gr.ChatMessage(role=MessageRole.ASSISTANT, content=content_text, metadata={"status": "done"})
                         )
-                yield messages
 
-            yield messages
+                    yield verbose_messages, quiet_messages
+
+                # Streaming delta strings (partial assistant reply) — only update verbose
+                elif isinstance(msg, str):
+                    text = msg.replace("<", r"\<").replace(">", r"\>")
+                    if verbose_messages and verbose_messages[-1].metadata.get("status") == "pending":
+                        verbose_messages[-1].content = text
+                    else:
+                        verbose_messages.append(
+                            gr.ChatMessage(role=MessageRole.ASSISTANT, content=text, metadata={"status": "pending"})
+                        )
+                    yield verbose_messages, quiet_messages
+
+            # final yield to ensure both UIs are up-to-date
+            yield verbose_messages, quiet_messages
+
         except Exception as e:
-            yield messages
+            # ensure UIs don't hang if something failed
+            yield verbose_messages, quiet_messages
             raise gr.Error(f"Error in interaction: {str(e)}")
-
-    def upload_file(self, file, file_uploads_log, allowed_file_types=None):
-        """
-        Upload a file and add it to the list of uploaded files in the session state.
-
-        The file is saved to the `self.file_upload_folder` folder.
-        If the file type is not allowed, it returns a message indicating the disallowed file type.
-
-        Args:
-            file (`gradio.File`): The uploaded file.
-            file_uploads_log (`list`): A list to log uploaded files.
-            allowed_file_types (`list`, *optional*): List of allowed file extensions. Defaults to [".pdf", ".docx", ".txt"].
-        """
-        import gradio as gr
-
-        if file is None:
-            return gr.Textbox(value="No file uploaded", visible=True), file_uploads_log
-
-        if allowed_file_types is None:
-            allowed_file_types = [".pdf", ".docx", ".txt"]
-
-        file_ext = os.path.splitext(file.name)[1].lower()
-        if file_ext not in allowed_file_types:
-            return gr.Textbox("File type disallowed", visible=True), file_uploads_log
-
-        # Sanitize file name
-        original_name = os.path.basename(file.name)
-        sanitized_name = re.sub(
-            r"[^\w\-.]", "_", original_name
-        )  # Replace any non-alphanumeric, non-dash, or non-dot characters with underscores
-
-        # Save the uploaded file to the specified folder
-        file_path = os.path.join(self.file_upload_folder, os.path.basename(sanitized_name))
-        shutil.copy(file.name, file_path)
-
-        return gr.Textbox(f"File uploaded: {file_path}", visible=True), file_uploads_log + [file_path]
-
-    def log_user_message(self, text_input, file_uploads_log):
-        import gradio as gr
-
-        return (
-            text_input
-            + (
-                f"\nYou have been provided with these files, which might be helpful or not: {file_uploads_log}"
-                if len(file_uploads_log) > 0
-                else ""
-            ),
-            "",
-            gr.Button(interactive=False),
-        )
 
     def launch(self, share: bool = True, **kwargs):
         """
@@ -411,11 +387,12 @@ class AgentUI:
     def create_app(self):
         import gradio as gr
 
-        with gr.Blocks(theme="ocean", fill_height=True) as demo:
+        with gr.Blocks(theme="glass", fill_height=True) as agent:
+
             # Add session state to store session-specific data
             session_state = gr.State({})
-            stored_messages = gr.State([])
-            file_uploads_log = gr.State([])
+            stored_messages_verbose = gr.State([])  # full reasoning history
+            stored_messages_quiet = gr.State([])    # only user + final answer
 
             with gr.Sidebar():
                 gr.Markdown(
@@ -432,44 +409,54 @@ class AgentUI:
                     )
                     submit_btn = gr.Button("Submit", variant="primary")
 
-                # If an upload folder is provided, enable the upload feature
-                if self.file_upload_folder is not None:
-                    upload_file = gr.File(label="Upload a file")
-                    upload_status = gr.Textbox(label="Upload Status", interactive=False, visible=False)
-                    upload_file.change(
-                        self.upload_file,
-                        [upload_file, file_uploads_log],
-                        [upload_status, file_uploads_log],
-                    )
-
                 gr.HTML(
                     "<br><br><h4><center>Powered by <a target='_blank' href='https://github.com/huggingface/smolagents'><b>smolagents</b></a></center></h4>"
                 )
 
-            # Main chat interface
-            chatbot = gr.Chatbot(
-                label="Agent",
-                type="messages",
-                avatar_images=(
-                    None,
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
-                ),
-                resizeable=True,
-                scale=1,
-                latex_delimiters=[
-                    {"left": r"$$", "right": r"$$", "display": True},
-                    {"left": r"$", "right": r"$", "display": False},
-                    {"left": r"\[", "right": r"\]", "display": True},
-                    {"left": r"\(", "right": r"\)", "display": False},
-                ],
-            )
+            with gr.Tab("Quiet"):
+                quiet_chatbot = gr.Chatbot(
+                        label="Agent",
+                        type="messages",
+                        avatar_images=(
+                            None,
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
+                        ),
+                        resizeable=True,
+                        scale=1,
+                        latex_delimiters=[
+                            {"left": r"$$", "right": r"$$", "display": True},
+                            {"left": r"$", "right": r"$", "display": False},
+                            {"left": r"\[", "right": r"\]", "display": True},
+                            {"left": r"\(", "right": r"\)", "display": False},
+                        ],
+                    )
 
-            # Set up event handlers
+            with gr.Tab("Chatterbox"):
+
+                # Main chat interface
+                verbose_chatbot = gr.Chatbot(
+                    label="Agent",
+                    type="messages",
+                    avatar_images=(
+                        None,
+                        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
+                    ),
+                    resizeable=True,
+                    scale=1,
+                    latex_delimiters=[
+                        {"left": r"$$", "right": r"$$", "display": True},
+                        {"left": r"$", "right": r"$", "display": False},
+                        {"left": r"\[", "right": r"\]", "display": True},
+                        {"left": r"\(", "right": r"\)", "display": False},
+                    ],
+                )
+
+            # Main input handlers: call interact_with_agent(prompt, verbose_state, quiet_state, session_state)
             text_input.submit(
-                self.log_user_message,
-                [text_input, file_uploads_log],
-                [stored_messages, text_input, submit_btn],
-            ).then(self.interact_with_agent, [stored_messages, chatbot, session_state], [chatbot]).then(
+                self.interact_with_agent,
+                [text_input, stored_messages_verbose, stored_messages_quiet, session_state],
+                [verbose_chatbot, quiet_chatbot],
+            ).then(
                 lambda: (
                     gr.Textbox(
                         interactive=True, placeholder="Enter your prompt here and press Shift+Enter or the button"
@@ -481,10 +468,10 @@ class AgentUI:
             )
 
             submit_btn.click(
-                self.log_user_message,
-                [text_input, file_uploads_log],
-                [stored_messages, text_input, submit_btn],
-            ).then(self.interact_with_agent, [stored_messages, chatbot, session_state], [chatbot]).then(
+                self.interact_with_agent,
+                [text_input, stored_messages_verbose, stored_messages_quiet, session_state],
+                [verbose_chatbot, quiet_chatbot],
+            ).then(
                 lambda: (
                     gr.Textbox(
                         interactive=True, placeholder="Enter your prompt here and press Shift+Enter or the button"
@@ -495,8 +482,11 @@ class AgentUI:
                 [text_input, submit_btn],
             )
 
-            chatbot.clear(self.agent.memory.reset)
-        return demo
+            # bind clears to both chat components so agent memory is reset
+            quiet_chatbot.clear(self.agent.memory.reset)
+            verbose_chatbot.clear(self.agent.memory.reset)
+
+        return agent
 
 
 __all__ = ["stream_to_gradio", "AgentUI"]
