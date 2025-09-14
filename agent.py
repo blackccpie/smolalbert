@@ -46,7 +46,7 @@ class TavilySearchTool(Tool):
 
     def forward(self, query: str):
         response = tavily_client.search(query)
-        return {"results": response}
+        return response
     
 class TavilyExtractTool(Tool):
     name = "tavily_extract"
@@ -61,7 +61,31 @@ class TavilyExtractTool(Tool):
 
     def forward(self, url: str):
         response = tavily_client.extract(url)
-        return {"results": response}
+        return response
+
+class TavilyImageURLSearchTool(Tool):
+    name = "tavily_image_search"
+    description = "Search for most relevant image URL on the web using Tavily."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query string.",
+        }
+    }
+    output_type = "string"
+
+    def forward(self, query: str):
+        response = tavily_client.search(query, include_images=True)
+        
+        images = response.get("images", [])
+        
+        if images:
+            # Return the URL of the first image
+            first_image = images[0]
+            if isinstance(first_image, dict):
+                return first_image.get("url")
+            return first_image
+        return "none"
 
 #model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
 #model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
@@ -71,11 +95,12 @@ provider = "nebius"
 # Set up the agent with the Tavily tool and a model
 api_key = os.getenv("TAVILY_API_KEY")
 search_tool = TavilySearchTool()
+image_search_tool = TavilyImageURLSearchTool()
 extract_tool = TavilyExtractTool()
 model = InferenceClientModel(model_id=model_id, provider=provider)
 agent = CodeAgent(
-    tools=[search_tool, extract_tool], 
-    model=model, 
+    tools=[search_tool, image_search_tool, extract_tool], 
+    model=model,
     stream_outputs=True,
     instructions=(
         "When writing the final answer, including the most relevant URL(s) "
