@@ -309,7 +309,7 @@ class AgentUI:
         self.reset_agent_memory = reset_agent_memory
         self.description = getattr(agent, "description", None)
 
-    def interact_with_agent(self, prompt, verbose_messages, quiet_messages, session_state):
+    def interact_with_agent(self, prompt, verbose_messages, quiet_messages):
         """
         Interacts with the agent and streams results into two separate histories:
             - verbose_messages: full reasoning stream (Chatterbox)
@@ -317,10 +317,6 @@ class AgentUI:
         Quiet is enhanced with pending "Step N..." indicators only (no generic thinking text).
         """
         import gradio as gr
-
-        # Get the agent type from the template agent
-        if "agent" not in session_state:
-            session_state["agent"] = self.agent
 
         # clear previous messages
         verbose_messages = []
@@ -338,7 +334,7 @@ class AgentUI:
             quiet_pending_idx = None
 
             for msg in stream_to_gradio(
-                session_state["agent"], task=prompt, reset_agent_memory=self.reset_agent_memory
+                self.agent, task=prompt, reset_agent_memory=self.reset_agent_memory
             ):
 
                 # Full gr.ChatMessage object (from steps) — append to verbose always
@@ -413,8 +409,7 @@ class AgentUI:
 
         with gr.Blocks(theme="glass", fill_height=True) as agent:
 
-            # Add session state to store session-specific data
-            session_state = gr.State({})
+            # Set up states to hold the session information
             stored_messages_verbose = gr.State([])  # full reasoning history
             stored_messages_quiet = gr.State([])    # only user + final answer
 
@@ -475,10 +470,10 @@ class AgentUI:
                     ],
                 )
 
-            # Main input handlers: call interact_with_agent(prompt, verbose_state, quiet_state, session_state)
+            # Main input handlers: call interact_with_agent(prompt, verbose_state, quiet_state)
             text_input.submit(
                 self.interact_with_agent,
-                [text_input, stored_messages_verbose, stored_messages_quiet, session_state],
+                [text_input, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
             ).then(
                 lambda: (
@@ -493,7 +488,7 @@ class AgentUI:
 
             submit_btn.click(
                 self.interact_with_agent,
-                [text_input, stored_messages_verbose, stored_messages_quiet, session_state],
+                [text_input, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
             ).then(
                 lambda: (
@@ -511,6 +506,5 @@ class AgentUI:
             verbose_chatbot.clear(self.agent.memory.reset)
 
         return agent
-
 
 __all__ = ["stream_to_gradio", "AgentUI"]
