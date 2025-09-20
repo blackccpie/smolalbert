@@ -25,8 +25,6 @@ import os
 from smolagents import CodeAgent, InferenceClientModel, Tool
 from tavily import TavilyClient
 
-from agent_ui import AgentUI
-
 # Define a custom tool for Tavily search
 from smolagents import Tool
 from tavily import TavilyClient
@@ -87,28 +85,52 @@ class TavilyImageURLSearchTool(Tool):
             return first_image
         return "none"
 
-#model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
-#model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
-model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
-provider = "nebius"
+class SmolAlbert(CodeAgent):
+    """
+    A specialized CodeAgent that uses Tavily tools and a specific model.
+    """
 
-# Set up the agent with the Tavily tool and a model
-api_key = os.getenv("TAVILY_API_KEY")
-search_tool = TavilySearchTool()
-image_search_tool = TavilyImageURLSearchTool()
-extract_tool = TavilyExtractTool()
-model = InferenceClientModel(model_id=model_id, provider=provider)
-agent = CodeAgent(
-    tools=[search_tool, image_search_tool, extract_tool], 
-    model=model,
-    stream_outputs=True,
-    instructions=(
-        "When writing the final answer, including the most relevant URL(s) "
-        "from your search results as inline Markdown hyperlinks is MANDATORY. "
-        "Example format: ... (see [1](https://example1.com)) ... (see [2](https://example2.com)) ... "
-        "Do not invent URL(s) — only use the ones you were provided."
-    )
-)
+    #model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+    #model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
+    model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    provider = "nebius"
 
-agent_ui = AgentUI(agent, reset_agent_memory=True)
-agent_ui.launch(share=False)
+    def __init__(self):
+        """
+        Initialize the SmolAlbert agent with Tavily tools and a model.
+        """
+        # Set up the agent with the Tavily tool and a model
+        api_key = os.getenv("TAVILY_API_KEY")
+        search_tool = TavilySearchTool()
+        image_search_tool = TavilyImageURLSearchTool()
+        extract_tool = TavilyExtractTool()
+        model = InferenceClientModel(model_id=self.model_id, provider=self.provider)
+        self.agent = CodeAgent(
+            tools=[search_tool, image_search_tool, extract_tool], 
+            model=model,
+            stream_outputs=True,
+            instructions=(
+                "When writing the final answer, including the most relevant URL(s) "
+                "from your search results as inline Markdown hyperlinks is MANDATORY. "
+                "Example format: ... (see [1](https://example1.com)) ... (see [2](https://example2.com)) ... "
+                "Do not invent URL(s) — only use the ones you were provided."
+            )
+        )
+
+    def run(self, task: str, reset: bool, additional_args: dict | None = None) -> str:
+        """
+        Run the agent with a given query and return the final answer.
+        """
+        return self.agent.run(
+            task=task,
+            stream=True,
+            reset=reset,
+            max_steps=5,
+            additional_args=additional_args
+        )
+        
+    def reset(self):
+        """
+        Reset the agent's internal state.
+        """
+        self.agent.memory.reset()

@@ -34,18 +34,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import os
 import re
-import shutil
-from pathlib import Path
 from typing import Generator
 
 from smolagents.agent_types import AgentAudio, AgentImage, AgentText
 from smolagents.agents import MultiStepAgent, PlanningStep
 from smolagents.memory import ActionStep, FinalAnswerStep
 from smolagents.models import ChatMessageStreamDelta, MessageRole, agglomerate_stream_deltas
-from smolagents.utils import _is_package_available
-
 
 def get_step_footnote_content(step_log: ActionStep | PlanningStep, step_name: str) -> str:
     """Get a footnote string for a step log with duration and token information"""
@@ -265,7 +260,6 @@ def pull_messages_from_step(step_log: ActionStep | PlanningStep | FinalAnswerSte
 def stream_to_gradio(
     agent,
     task: str,
-    task_images: list | None = None,
     reset_agent_memory: bool = False,
     additional_args: dict | None = None,
 ) -> Generator:
@@ -273,7 +267,7 @@ def stream_to_gradio(
 
     accumulated_events: list[ChatMessageStreamDelta] = []
     for event in agent.run(
-        task, images=task_images, stream=True, reset=reset_agent_memory, additional_args=additional_args
+        task, reset=reset_agent_memory, additional_args=additional_args
     ):
         if isinstance(event, ActionStep | PlanningStep | FinalAnswerStep):
             for message in pull_messages_from_step(
@@ -502,8 +496,8 @@ class AgentUI:
             )
 
             # bind clears to both chat components so agent memory is reset
-            quiet_chatbot.clear(self.agent.memory.reset)
-            verbose_chatbot.clear(self.agent.memory.reset)
+            quiet_chatbot.clear(self.agent.reset)
+            verbose_chatbot.clear(self.agent.reset)
 
         return agent
 
