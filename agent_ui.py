@@ -383,6 +383,36 @@ class AgentUI:
         self.agent.reset()
         return [], []
 
+    def disable_query(self, text_input):
+        """
+        Disable the text input and submit button while the agent is processing.
+        """
+        import gradio as gr
+
+        return (
+            text_input,
+            gr.Textbox(
+                value="",
+                placeholder="Wait for answer completion before submitting a new prompt...",
+                interactive=False
+            ),
+            gr.Button(interactive=False),
+        )
+
+    def enable_query(self):
+        """
+        Enable the text input and submit button after the agent has finished processing.
+        """
+        import gradio as gr
+
+        return (
+            gr.Textbox(
+                interactive=True, 
+                placeholder="Enter your prompt here and press Shift+Enter or the button"
+            ),
+            gr.Button(interactive=True),
+        )
+
     def launch(self, share: bool = True, **kwargs):
         """
         Launch the Gradio app with the agent interface.
@@ -399,6 +429,7 @@ class AgentUI:
         with gr.Blocks(theme="glass", fill_height=True) as agent:
 
             # Set up states to hold the session information
+            stored_query = gr.State("")             # current user query
             stored_messages_verbose = gr.State([])  # full reasoning history
             stored_messages_quiet = gr.State([])    # only user + final answer
 
@@ -461,33 +492,29 @@ class AgentUI:
 
             # Main input handlers: call interact_with_agent(prompt, verbose_state, quiet_state)
             text_input.submit(
+                self.disable_query,
+                text_input,
+                [stored_query, text_input, submit_btn]
+            ).then(
                 self.interact_with_agent,
-                [text_input, stored_messages_verbose, stored_messages_quiet],
+                [stored_query, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
             ).then(
-                lambda: (
-                    gr.Textbox(
-                        interactive=True, 
-                        placeholder="Enter your prompt here and press Shift+Enter or the button"
-                    ),
-                    gr.Button(interactive=True),
-                ),
+                self.enable_query,
                 None,
                 [text_input, submit_btn],
             )
 
             submit_btn.click(
+                self.disable_query,
+                text_input,
+                [stored_query, text_input, submit_btn]
+            ).then(
                 self.interact_with_agent,
-                [text_input, stored_messages_verbose, stored_messages_quiet],
+                [stored_query, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
             ).then(
-                lambda: (
-                    gr.Textbox(
-                        interactive=True, 
-                        placeholder="Enter your prompt here and press Shift+Enter or the button"
-                    ),
-                    gr.Button(interactive=True),
-                ),
+                self.enable_query,
                 None,
                 [text_input, submit_btn],
             )
