@@ -260,15 +260,12 @@ def pull_messages_from_step(step_log: ActionStep | PlanningStep | FinalAnswerSte
 def stream_to_gradio(
     agent,
     task: str,
-    reset_agent_memory: bool = False,
     additional_args: dict | None = None,
 ) -> Generator:
     """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     accumulated_events: list[ChatMessageStreamDelta] = []
-    for event in agent.run(
-        task, reset=reset_agent_memory, additional_args=additional_args
-    ):
+    for event in agent.run(task, additional_args=additional_args):
         if isinstance(event, ActionStep | PlanningStep | FinalAnswerStep):
             for message in pull_messages_from_step(
                 event,
@@ -294,13 +291,10 @@ class AgentUI:
 
     Args:
         agent ([`MultiStepAgent`]): The agent to interact with.
-        reset_agent_memory (`bool`, *optional*, defaults to `False`): Whether to reset the agent's memory at the start of each interaction.
-            If `True`, the agent will not remember previous interactions.
     """
 
-    def __init__(self, agent: MultiStepAgent, reset_agent_memory: bool = False):
+    def __init__(self, agent: MultiStepAgent):
         self.agent = agent
-        self.reset_agent_memory = reset_agent_memory
         self.description = getattr(agent, "description", None)
 
     def interact_with_agent(self, prompt, verbose_messages, quiet_messages):
@@ -311,10 +305,6 @@ class AgentUI:
         Quiet is enhanced with pending "Step N..." indicators only (no generic thinking text).
         """
         import gradio as gr
-
-        # clear previous messages
-        verbose_messages = []
-        quiet_messages = []
 
         try:
             # Append the user message to both histories (quiet keeps the user query)
@@ -327,9 +317,7 @@ class AgentUI:
 
             quiet_pending_idx = None
 
-            for msg in stream_to_gradio(
-                self.agent, task=prompt, reset_agent_memory=self.reset_agent_memory
-            ):
+            for msg in stream_to_gradio(self.agent, task=prompt):
 
                 # Full gr.ChatMessage object (from steps) — append to verbose always
                 if isinstance(msg, gr.ChatMessage):
@@ -388,6 +376,13 @@ class AgentUI:
             yield verbose_messages, quiet_messages
             raise gr.Error(f"Error in interaction: {str(e)}")
 
+    def clear_history(self):
+        """
+        Clear the chat history and reset the agent's memory.
+        """
+        self.agent.reset()
+        return [], []
+
     def launch(self, share: bool = True, **kwargs):
         """
         Launch the Gradio app with the agent interface.
@@ -426,7 +421,7 @@ class AgentUI:
                     "<br><br><h4><center>Powered by <a target='_blank' href='https://github.com/huggingface/smolagents'><b>smolagents</b></a></center></h4>"
                 )
 
-            with gr.Tab("Quiet"):
+            with gr.Tab("Quiet", scale=1):
                 quiet_chatbot = gr.Chatbot(
                         label="Agent",
                         type="messages",
@@ -444,7 +439,7 @@ class AgentUI:
                         ],
                     )
 
-            with gr.Tab("Chatterbox"):
+            with gr.Tab("Chatterbox", scale=1):
 
                 # Main chat interface
                 verbose_chatbot = gr.Chatbot(
@@ -472,7 +467,8 @@ class AgentUI:
             ).then(
                 lambda: (
                     gr.Textbox(
-                        interactive=True, placeholder="Enter your prompt here and press Shift+Enter or the button"
+                        interactive=True, 
+                        placeholder="Enter your prompt here and press Shift+Enter or the button"
                     ),
                     gr.Button(interactive=True),
                 ),
@@ -487,7 +483,8 @@ class AgentUI:
             ).then(
                 lambda: (
                     gr.Textbox(
-                        interactive=True, placeholder="Enter your prompt here and press Shift+Enter or the button"
+                        interactive=True, 
+                        placeholder="Enter your prompt here and press Shift+Enter or the button"
                     ),
                     gr.Button(interactive=True),
                 ),
@@ -496,8 +493,8 @@ class AgentUI:
             )
 
             # bind clears to both chat components so agent memory is reset
-            quiet_chatbot.clear(self.agent.reset)
-            verbose_chatbot.clear(self.agent.reset)
+            quiet_chatbot.clear(self.clear_history, inputs=None, outputs=[stored_messages_verbose, stored_messages_quiet])
+            verbose_chatbot.clear(self.clear_history, inputs=None, outputs=[stored_messages_verbose, stored_messages_quiet])
 
         return agent
 

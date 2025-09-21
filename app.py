@@ -24,5 +24,5 @@ from agent import SmolAlbert
 from agent_ui import AgentUI
 
 agent = SmolAlbert()
-agent_ui = AgentUI(agent, reset_agent_memory=True)
+agent_ui = AgentUI(agent)
 agent_ui.launch(share=False)

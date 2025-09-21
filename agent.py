@@ -93,7 +93,7 @@ class SmolAlbert(CodeAgent):
     #model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
     #model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
     model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
-    provider = "nebius"
+    provider = "auto"
 
     def __init__(self):
         """
@@ -118,14 +118,14 @@ class SmolAlbert(CodeAgent):
             )
         )
 
-    def run(self, task: str, reset: bool, additional_args: dict | None = None) -> str:
+    def run(self, task: str, additional_args: dict | None = None) -> str:
         """
         Run the agent with a given query and return the final answer.
         """
         return self.agent.run(
             task=task,
             stream=True,
-            reset=reset,
+            reset=False,
             max_steps=5,
             additional_args=additional_args
         )
