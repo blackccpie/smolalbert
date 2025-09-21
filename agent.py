@@ -114,6 +114,7 @@ class SmolAlbert(CodeAgent):
                 "from your search results as inline Markdown hyperlinks is MANDATORY. "
                 "Example format: ... (see [1](https://example1.com)) ... (see [2](https://example2.com)) ... "
                 "Do not invent URL(s) — only use the ones you were provided."
+                "If the answer includes an image URL, include it as an inline Markdown image: ![image](<image_url>)"
             )
         )
 
