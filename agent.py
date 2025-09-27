@@ -22,68 +22,9 @@
 
 import os
 
-from smolagents import CodeAgent, InferenceClientModel, Tool
-from tavily import TavilyClient
+from smolagents import CodeAgent, InferenceClientModel
 
-# Define a custom tool for Tavily search
-from smolagents import Tool
-from tavily import TavilyClient
-
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
-
-class TavilySearchTool(Tool):
-    name = "tavily_search"
-    description = "Search the web using Tavily."
-    inputs = {
-        "query": {
-            "type": "string",
-            "description": "The search query string.",
-        }
-    }
-    output_type = "string"
-
-    def forward(self, query: str):
-        response = tavily_client.search(query)
-        return response
-    
-class TavilyExtractTool(Tool):
-    name = "tavily_extract"
-    description = "Extract information from web pages using Tavily."
-    inputs = {
-        "url": {
-            "type": "string",
-            "description": "The URL of the web page to extract information from.",
-        }
-    }
-    output_type = "string"
-
-    def forward(self, url: str):
-        response = tavily_client.extract(url)
-        return response
-
-class TavilyImageURLSearchTool(Tool):
-    name = "tavily_image_search"
-    description = "Search for most relevant image URL on the web using Tavily."
-    inputs = {
-        "query": {
-            "type": "string",
-            "description": "The search query string.",
-        }
-    }
-    output_type = "string"
-
-    def forward(self, query: str):
-        response = tavily_client.search(query, include_images=True)
-        
-        images = response.get("images", [])
-        
-        if images:
-            # Return the URL of the first image
-            first_image = images[0]
-            if isinstance(first_image, dict):
-                return first_image.get("url")
-            return first_image
-        return "none"
+from tools import TavilySearchTool, TavilyExtractTool, TavilyImageURLSearchTool
 
 class SmolAlbert(CodeAgent):
     """
@@ -92,7 +33,8 @@ class SmolAlbert(CodeAgent):
 
     #model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
     #model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
-    model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    #model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    model_id = "google/gemma-3-27b-it"
     provider = "auto"
 
     def __init__(self):
