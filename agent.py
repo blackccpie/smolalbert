@@ -24,7 +24,8 @@ import os
 
 from smolagents import CodeAgent, InferenceClientModel
 
-from tools import TavilySearchTool, TavilyExtractTool, TavilyImageURLSearchTool
+from other_tools import ImageQueryTool
+from web_tools import TavilySearchTool, TavilyExtractTool, TavilyImageURLSearchTool
 
 class SmolAlbert(CodeAgent):
     """
@@ -45,12 +46,13 @@ class SmolAlbert(CodeAgent):
         search_tool = TavilySearchTool()
         image_search_tool = TavilyImageURLSearchTool()
         extract_tool = TavilyExtractTool()
+        image_query_tool = ImageQueryTool()
         model = InferenceClientModel(
             model_id=self.model_id,
             provider=self.provider,
             token=os.getenv("HF_API_KEY"))
         self.agent = CodeAgent(
-            tools=[search_tool, image_search_tool, extract_tool], 
+            tools=[search_tool, image_search_tool, extract_tool, image_query_tool], 
             model=model,
             stream_outputs=True,
             instructions=(
