@@ -333,8 +333,14 @@ class AgentUI:
                     # Detect final answer messages and append to quiet
                     # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use "**Final answer:**" text
                     if "final answer" in content_text.lower():
-                        # Replace pending with final answer in Quiet
-                        final_msg = gr.ChatMessage(role=MessageRole.ASSISTANT, content=content_text, metadata={"status": "done"})
+                        # Remove everything before and including the "Final answer:" label (and any leading/trailing whitespace/newlines)
+                        answer_only = re.sub(
+                            r"(?s)^.*?\*\*Final answer:\*\*\s*[\n]*",  # (?s) allows . to match newlines
+                            "",
+                            content_text,
+                            flags=re.IGNORECASE,
+                        )
+                        final_msg = gr.ChatMessage(role=MessageRole.ASSISTANT, content=answer_only, metadata={"status": "done"})
                         if quiet_pending_idx is not None:
                             quiet_messages[quiet_pending_idx] = final_msg
                             quiet_pending_idx = None

@@ -100,11 +100,13 @@ class SmolAlbert(CodeAgent):
         Initialize the SmolAlbert agent with Tavily tools and a model.
         """
         # Set up the agent with the Tavily tool and a model
-        api_key = os.getenv("TAVILY_API_KEY")
         search_tool = TavilySearchTool()
         image_search_tool = TavilyImageURLSearchTool()
         extract_tool = TavilyExtractTool()
-        model = InferenceClientModel(model_id=self.model_id, provider=self.provider)
+        model = InferenceClientModel(
+            model_id=self.model_id,
+            provider=self.provider,
+            token=os.getenv("HF_API_KEY"))
         self.agent = CodeAgent(
             tools=[search_tool, image_search_tool, extract_tool], 
             model=model,
