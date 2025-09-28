@@ -332,7 +332,7 @@ class AgentUI:
 
                     # Detect final answer messages and append to quiet
                     # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use "**Final answer:**" text
-                    if "final answer" in content_text.lower():
+                    if "Final answer:" in content_text:
                         # Remove everything before and including the "Final answer:" label (and any leading/trailing whitespace/newlines)
                         answer_only = re.sub(
                             r"(?s)^.*?\*\*Final answer:\*\*\s*[\n]*",  # (?s) allows . to match newlines
