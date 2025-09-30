@@ -21,13 +21,32 @@
 # THE SOFTWARE.
 
 import os
+import requests
 
 from smolagents import Tool
 from tavily import TavilyClient
 
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+class TavilyBaseClient:
+    __api_key = os.getenv("TAVILY_API_KEY")
+    _tavily_client = TavilyClient(api_key=__api_key)
 
-class TavilySearchTool(Tool):
+    @staticmethod
+    def get_usage() -> str:
+        url = "https://api.tavily.com/usage"
+        headers = {
+            "Authorization": f"Bearer {TavilyBaseClient.__api_key}",
+            "Content-Type": "application/json",
+        }
+        res = requests.get(url, headers=headers)
+        res.raise_for_status()
+        
+        account = res.json().get("account", {})
+        plan_usage = account.get("plan_usage")
+        plan_limit = account.get("plan_limit")
+
+        return f"{plan_usage}/{plan_limit}"
+
+class TavilySearchTool(TavilyBaseClient, Tool):
     """
     A tool to perform web searches using the Tavily API.
     """
@@ -42,10 +61,10 @@ class TavilySearchTool(Tool):
     output_type = "string"
 
     def forward(self, query: str):
-        response = tavily_client.search(query)
+        response = self._tavily_client.search(query)
         return response
-    
-class TavilyExtractTool(Tool):
+
+class TavilyExtractTool(TavilyBaseClient, Tool):
     """
     A tool to extract information from web pages using the Tavily API.
     """
@@ -60,10 +79,10 @@ class TavilyExtractTool(Tool):
     output_type = "string"
 
     def forward(self, url: str):
-        response = tavily_client.extract(url)
+        response = self._tavily_client.extract(url)
         return response
 
-class TavilyImageURLSearchTool(Tool):
+class TavilyImageURLSearchTool(TavilyBaseClient, Tool):
     """
     A tool to search for image URLs using the Tavily API.
     """
@@ -78,7 +97,7 @@ class TavilyImageURLSearchTool(Tool):
     output_type = "string"
 
     def forward(self, query: str):
-        response = tavily_client.search(query, include_images=True)
+        response = self._tavily_client.search(query, include_images=True)
         
         images = response.get("images", [])
         

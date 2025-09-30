@@ -25,7 +25,7 @@ import os
 from smolagents import CodeAgent, InferenceClientModel
 
 from other_tools import ImageQueryTool
-from web_tools import TavilySearchTool, TavilyExtractTool, TavilyImageURLSearchTool
+from web_tools import TavilyBaseClient, TavilySearchTool, TavilyExtractTool, TavilyImageURLSearchTool
 
 class SmolAlbert(CodeAgent):
     """
@@ -34,8 +34,8 @@ class SmolAlbert(CodeAgent):
 
     #model_id = "Qwen/Qwen3-Coder-30B-A3B-Instruct"
     #model_id = "Qwen/Qwen3-30B-A3B-Thinking-2507"
-    #model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
-    model_id = "google/gemma-3-27b-it"
+    model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    #model_id = "google/gemma-3-27b-it"
     provider = "auto"
 
     def __init__(self):
@@ -81,3 +81,10 @@ class SmolAlbert(CodeAgent):
         Reset the agent's internal state.
         """
         self.agent.memory.reset()
+
+    @staticmethod
+    def get_search_credits() -> str:
+        """
+        Get the current search credits of the Tavily API.
+        """
+        return TavilyBaseClient.get_usage()

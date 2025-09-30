@@ -23,6 +23,7 @@
 from agent import SmolAlbert
 from agent_ui import AgentUI
 
-agent = SmolAlbert()
-agent_ui = AgentUI(agent)
-agent_ui.launch(share=False)
+if __name__ == "__main__":
+    agent = SmolAlbert()
+    agent_ui = AgentUI(agent)
+    agent_ui.launch(share=False)

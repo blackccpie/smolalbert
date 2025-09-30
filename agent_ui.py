@@ -42,6 +42,8 @@ from smolagents.agents import MultiStepAgent, PlanningStep
 from smolagents.memory import ActionStep, FinalAnswerStep
 from smolagents.models import ChatMessageStreamDelta, MessageRole, agglomerate_stream_deltas
 
+FINAL_ANSWER_TAG = "Final answer:"
+
 def get_step_footnote_content(step_log: ActionStep | PlanningStep, step_name: str) -> str:
     """Get a footnote string for a step log with duration and token information"""
     step_footnote = f"**{step_name}**"
@@ -218,7 +220,7 @@ def _process_final_answer_step(step_log: FinalAnswerStep) -> Generator:
     if isinstance(final_answer, AgentText):
         yield gr.ChatMessage(
             role=MessageRole.ASSISTANT,
-            content=f"**Final answer:**\n{final_answer.to_string()}\n",
+            content=f"**{FINAL_ANSWER_TAG}**\n{final_answer.to_string()}\n",
             metadata={"status": "done"},
         )
     elif isinstance(final_answer, AgentImage):
@@ -235,7 +237,7 @@ def _process_final_answer_step(step_log: FinalAnswerStep) -> Generator:
         )
     else:
         yield gr.ChatMessage(
-            role=MessageRole.ASSISTANT, content=f"**Final answer:** {str(final_answer)}", metadata={"status": "done"}
+            role=MessageRole.ASSISTANT, content=f"**{FINAL_ANSWER_TAG}** {str(final_answer)}", metadata={"status": "done"}
         )
 
 
@@ -331,11 +333,11 @@ class AgentUI:
                     content_text = msg.content if isinstance(msg.content, str) else ""
 
                     # Detect final answer messages and append to quiet
-                    # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use "**Final answer:**" text
-                    if "Final answer:" in content_text:
-                        # Remove everything before and including the "Final answer:" label (and any leading/trailing whitespace/newlines)
+                    # HACK : FinalAnswerStep messages are produced by _process_final_answer_step and use FINAL_ANSWER_TAG
+                    if FINAL_ANSWER_TAG in content_text:
+                        # Remove everything before and including the FINAL_ANSWER_TAG label (and any leading/trailing whitespace/newlines)
                         answer_only = re.sub(
-                            r"(?s)^.*?\*\*Final answer:\*\*\s*[\n]*",  # (?s) allows . to match newlines
+                            rf"(?s)^.*?\*\*{FINAL_ANSWER_TAG}\*\*\s*[\n]*",  # (?s) allows . to match newlines
                             "",
                             content_text,
                             flags=re.IGNORECASE,
@@ -429,10 +431,17 @@ class AgentUI:
         """
         self.create_app().launch(debug=True, share=share, **kwargs)
 
+    def get_tavily_credits(self):
+        """
+        Fetch the Tavily credits.
+        """
+        return self.agent.get_search_credits()
+
     def create_app(self):
         import gradio as gr
 
-        with gr.Blocks(theme="glass", fill_height=True) as agent:
+        # some nice thmes available here: https://huggingface.co/spaces/gradio/theme-gallery
+        with gr.Blocks(theme="JohnSmith9982/small_and_pretty", fill_height=True) as agent:
 
             # Set up states to hold the session information
             stored_query = gr.State("")             # current user query
@@ -454,31 +463,38 @@ class AgentUI:
                     )
                     submit_btn = gr.Button("Submit", variant="primary")
 
+                tavily_credits = gr.Textbox(
+                    label="Tavily Credits",
+                    value=self.get_tavily_credits(),
+                    interactive=False,
+                    container=True,
+                )
+
                 gr.HTML(
                     "<br><br><h4><center>Powered by <a target='_blank' href='https://github.com/huggingface/smolagents'><b>smolagents</b></a></center></h4>"
                 )
 
             with gr.Tab("Quiet", scale=1):
+
                 quiet_chatbot = gr.Chatbot(
-                        label="Agent",
-                        type="messages",
-                        avatar_images=(
-                            None,
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
-                        ),
-                        resizeable=True,
-                        scale=1,
-                        latex_delimiters=[
-                            {"left": r"$$", "right": r"$$", "display": True},
-                            {"left": r"$", "right": r"$", "display": False},
-                            {"left": r"\[", "right": r"\]", "display": True},
-                            {"left": r"\(", "right": r"\)", "display": False},
-                        ],
-                    )
+                    label="Agent",
+                    type="messages",
+                    avatar_images=(
+                        None,
+                        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
+                    ),
+                    resizeable=True,
+                    scale=1,
+                    latex_delimiters=[
+                        {"left": r"$$", "right": r"$$", "display": True},
+                        {"left": r"$", "right": r"$", "display": False},
+                        {"left": r"\[", "right": r"\]", "display": True},
+                        {"left": r"\(", "right": r"\)", "display": False},
+                    ],
+                )
 
             with gr.Tab("Chatterbox", scale=1):
 
-                # Main chat interface
                 verbose_chatbot = gr.Chatbot(
                     label="Agent",
                     type="messages",
@@ -506,6 +522,10 @@ class AgentUI:
                 [stored_query, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
             ).then(
+                self.get_tavily_credits,
+                None,
+                tavily_credits,
+            ).then(
                 self.enable_query,
                 None,
                 [text_input, submit_btn],
@@ -519,6 +539,10 @@ class AgentUI:
                 self.interact_with_agent,
                 [stored_query, stored_messages_verbose, stored_messages_quiet],
                 [verbose_chatbot, quiet_chatbot],
+            ).then(
+                self.get_tavily_credits,
+                None,
+                tavily_credits,
             ).then(
                 self.enable_query,
                 None,
