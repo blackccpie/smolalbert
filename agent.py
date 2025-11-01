@@ -43,16 +43,16 @@ class SmolAlbert(CodeAgent):
         Initialize the SmolAlbert agent with Tavily tools and a model.
         """
         # Set up the agent with the Tavily tool and a model
-        search_tool = TavilySearchTool()
-        image_search_tool = TavilyImageURLSearchTool()
-        extract_tool = TavilyExtractTool()
-        image_query_tool = ImageQueryTool()
+        self.search_tool = TavilySearchTool()
+        self.image_search_tool = TavilyImageURLSearchTool()
+        self.extract_tool = TavilyExtractTool()
+        self.image_query_tool = ImageQueryTool()
         model = InferenceClientModel(
             model_id=self.model_id,
             provider=self.provider,
             token=os.getenv("HF_API_KEY"))
         self.agent = CodeAgent(
-            tools=[search_tool, image_search_tool, extract_tool, image_query_tool], 
+            tools=[self.search_tool, self.image_search_tool, self.extract_tool, self.image_query_tool], 
             model=model,
             stream_outputs=True,
             instructions=(
@@ -63,6 +63,16 @@ class SmolAlbert(CodeAgent):
                 "If the answer includes an image URL, include it as an inline Markdown image: ![image](<image_url>)"
             )
         )
+
+        self.advanced_mode = False
+
+    def enable_advanced_mode(self, enable: bool):
+        """
+        Enable or disable advanced mode for the search tool.
+        Advanced mode uses more credits but yields better results.
+        """
+        self.advanced_mode = enable
+        self.search_tool.enable_advanced_mode(enable)
 
     def run(self, task: str, additional_args: dict | None = None) -> str:
         """

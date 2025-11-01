@@ -46,6 +46,10 @@ class TavilyBaseClient:
 
         return f"{plan_usage}/{plan_limit}"
 
+# ---------------------------------------------------------------------
+# Tavily Tools
+# ---------------------------------------------------------------------
+
 class TavilySearchTool(TavilyBaseClient, Tool):
     """
     A tool to perform web searches using the Tavily API.
@@ -60,16 +64,63 @@ class TavilySearchTool(TavilyBaseClient, Tool):
     }
     output_type = "string"
 
+    # Consumes 1 Tavily credit per query
+    __basic_params = {
+            "search_depth": "basic",
+            "max_results": 10,              # fetch up to 10 sources
+            "auto_parameters": False,       # keep manual control
+            "include_raw_content": False,
+        }
+
+    # Consumes 2 Tavily credits per query
+    __advanced_params = {
+            "search_depth": "advanced",     # 'advanced' yields better relevance
+            "max_results": 10,              # fetch up to 10 sources
+            "chunks_per_source": 3,         # number of content snippets to return per source
+            "auto_parameters": False,       # keep manual control
+            "include_raw_content": False,
+        }
+
+    def __init__(self):
+        """
+        Construct the TavilySearchTool.
+        """
+        # Call superclass constructor
+        super().__init__()
+
+
+        self.params = TavilySearchTool.__basic_params
+
+    def enable_advanced_mode(self, enable: bool = True):
+        """
+        Enable or disable advanced mode for the search tool.
+        Advanced mode uses more credits but yields better results.
+        """
+        if enable:
+            self.params = TavilySearchTool.__advanced_params
+        else:
+            self.params = TavilySearchTool.__basic_params
+        
+        print(f"TavilySearchTool advanced mode has been {'enabled' if enable else 'disabled'}.")
+
     def forward(self, query: str):
-        response = self._tavily_client.search(query)
+
+        params = self.params
+        params["query"] = query
+
+        try:
+            response = self._tavily_client.search(**params)
+        except Exception as e:
+            return f"Error calling Tavily API: {e}"
+        
         return response
 
 class TavilyExtractTool(TavilyBaseClient, Tool):
     """
-    A tool to extract information from web pages using the Tavily API.
+    A tool to extract raw information from web pages using the Tavily API.
     """
     name = "tavily_extract"
-    description = "Extract information from web pages using Tavily."
+    description = "Extract raw information from web pages using Tavily."
     inputs = {
         "url": {
             "type": "string",
@@ -79,7 +130,13 @@ class TavilyExtractTool(TavilyBaseClient, Tool):
     output_type = "string"
 
     def forward(self, url: str):
-        response = self._tavily_client.extract(url)
+        try:
+            response = self._tavily_client.extract(url)
+        except Exception as e:
+            return f"Error calling Tavily extract API: {e}"
+
+        # Tavily's Extract API can return raw HTML + text.
+        # you may trim or sanitize here if needed.
         return response
 
 class TavilyImageURLSearchTool(TavilyBaseClient, Tool):
@@ -97,14 +154,21 @@ class TavilyImageURLSearchTool(TavilyBaseClient, Tool):
     output_type = "string"
 
     def forward(self, query: str):
-        response = self._tavily_client.search(query, include_images=True)
-        
+        try:
+            response = self._tavily_client.search(
+                query, 
+                include_images=True, 
+                max_results=5
+            )
+        except Exception as e:
+            return f"Error calling Tavily API: {e}"
+
         images = response.get("images", [])
-        
-        if images:
-            # Return the URL of the first image
-            first_image = images[0]
-            if isinstance(first_image, dict):
-                return first_image.get("url")
-            return first_image
-        return "none"
+        if not images:
+            return "none"
+
+        # Return the URL of the first image
+        first_image = images[0]
+        if isinstance(first_image, dict):
+            return first_image.get("url", "none")
+        return first_image or "none"

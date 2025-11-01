@@ -299,7 +299,13 @@ class AgentUI:
         self.agent = agent
         self.description = getattr(agent, "description", None)
 
-    def interact_with_agent(self, prompt, verbose_messages, quiet_messages):
+    def set_advanced_mode(self, enabled: bool):
+        """
+        Configure the agent to enable/disable advanced mode.
+        """
+        self.agent.enable_advanced_mode(enabled)
+
+    def interact_with_agent(self, prompt: str, verbose_messages: list, quiet_messages: list):
         """
         Interacts with the agent and streams results into two separate histories:
             - verbose_messages: full reasoning stream (Chatterbox)
@@ -437,6 +443,12 @@ class AgentUI:
         """
         return self.agent.get_search_credits()
 
+    def get_advanced_mode(self) -> bool:
+        """
+        Return the agent's current advanced_mode flag for initializing the checkbox on page load.
+        """
+        return getattr(self.agent, "advanced_mode", False)
+
     def create_app(self):
         import gradio as gr
 
@@ -462,6 +474,19 @@ class AgentUI:
                         placeholder="Enter your prompt here and press Shift+Enter or press the button",
                     )
                     submit_btn = gr.Button("Submit", variant="primary")
+
+                # Advanced search mode checkbox
+                advanced_checkbox = gr.Checkbox(
+                    label="Advanced search mode",
+                    value=getattr(self.agent, "advanced_mode", False),
+                    info="Toggle advanced search behavior for the agent",
+                    container=True,
+                )
+
+                # call agent configuration when checkbox changes
+                advanced_checkbox.change(self.set_advanced_mode, advanced_checkbox, None)
+                # ensure the checkbox reflects the current agent state each time a page/session loads
+                agent.load(self.get_advanced_mode, None, advanced_checkbox)
 
                 tavily_credits = gr.Textbox(
                     label="Tavily Credits",
@@ -554,5 +579,3 @@ class AgentUI:
             verbose_chatbot.clear(self.clear_history, inputs=None, outputs=[stored_messages_verbose, stored_messages_quiet])
 
         return agent
-
-__all__ = ["stream_to_gradio", "AgentUI"]
