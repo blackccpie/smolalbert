@@ -73,6 +73,7 @@ class SmolAlbert(CodeAgent):
         """
         self.advanced_mode = enable
         self.search_tool.enable_advanced_mode(enable)
+        self.extract_tool.enable_advanced_mode(enable)
 
     def run(self, task: str, additional_args: dict | None = None) -> str:
         """

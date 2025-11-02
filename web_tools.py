@@ -129,9 +129,32 @@ class TavilyExtractTool(TavilyBaseClient, Tool):
     }
     output_type = "string"
 
+    def __init__(self):
+        """
+        Construct the TavilyExtractTool.
+        """
+        # Call superclass constructor
+        super().__init__()
+
+        self.extract_depth = "basic"
+
+    def enable_advanced_mode(self, enable: bool = True):
+        """
+        Enable or disable advanced mode for the extract tool.
+        Advanced mode uses more credits but yields better results (retrieves more data, including tables and embedded content).
+        """
+        if enable:
+            self.extract_depth = "advanced"
+        else:
+            self.extract_depth = "basic"
+
+        print(f"TavilyExtractTool advanced mode has been {'enabled' if enable else 'disabled'}.")
+
     def forward(self, url: str):
         try:
-            response = self._tavily_client.extract(url)
+            response = self._tavily_client.extract(
+                urls=url,
+                extract_depth=self.extract_depth)
         except Exception as e:
             return f"Error calling Tavily extract API: {e}"
 
@@ -156,8 +179,9 @@ class TavilyImageURLSearchTool(TavilyBaseClient, Tool):
     def forward(self, query: str):
         try:
             response = self._tavily_client.search(
-                query, 
-                include_images=True, 
+                query,
+                include_images=True,
+                include_image_descriptions=True,
                 max_results=5
             )
         except Exception as e:
